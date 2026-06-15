@@ -520,7 +520,7 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         menu.addItem(disabledItem(title: window.displayName))
         menu.addItem(disabledItem(title: "剩余: \(window.remainingPercent)%"))
         menu.addItem(disabledItem(title: "已用: \(window.usedPercent)%"))
-        menu.addItem(disabledItem(title: "重置: \(resetLabel(for: window.resetAt))"))
+        menu.addItem(disabledItem(title: "重置: \(resetLabel(for: window))"))
     }
 
     private func addTitleModeItems(to menu: NSMenu) {
@@ -652,7 +652,7 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         let shouldIncludeReset = includeReset ?? preferences.showPrimaryResetInTitle
         var text = "\(window.shortName) \(window.remainingPercent)%"
         if shouldIncludeReset {
-            text += " \(resetLabel(for: window.resetAt))"
+            text += " \(resetLabel(for: window))"
         }
         return text
     }
@@ -661,13 +661,13 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         "\(snapshot.primary.displayName) 剩余 \(snapshot.primary.remainingPercent)%, \(snapshot.secondary.displayName) 剩余 \(snapshot.secondary.remainingPercent)%"
     }
 
-    private func resetLabel(for epoch: TimeInterval) -> String {
-        let date = Date(timeIntervalSince1970: epoch)
+    private func resetLabel(for window: RateLimitWindow) -> String {
+        let date = Date(timeIntervalSince1970: window.resetAt)
         let calendar = Calendar.current
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
 
-        if calendar.isDateInToday(date) {
+        if window.windowMinutes == 300 || calendar.isDateInToday(date) {
             formatter.dateFormat = "HH:mm"
         } else {
             formatter.dateFormat = "M月d日"
@@ -691,8 +691,8 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         if let snapshot = latestSnapshot {
             return [
                 title(for: snapshot),
-                "\(snapshot.primary.displayName): 剩余 \(snapshot.primary.remainingPercent)%, 已用 \(snapshot.primary.usedPercent)%, 重置 \(resetLabel(for: snapshot.primary.resetAt))",
-                "\(snapshot.secondary.displayName): 剩余 \(snapshot.secondary.remainingPercent)%, 已用 \(snapshot.secondary.usedPercent)%, 重置 \(resetLabel(for: snapshot.secondary.resetAt))"
+                "\(snapshot.primary.displayName): 剩余 \(snapshot.primary.remainingPercent)%, 已用 \(snapshot.primary.usedPercent)%, 重置 \(resetLabel(for: snapshot.primary))",
+                "\(snapshot.secondary.displayName): 剩余 \(snapshot.secondary.remainingPercent)%, 已用 \(snapshot.secondary.usedPercent)%, 重置 \(resetLabel(for: snapshot.secondary))"
             ].joined(separator: "\n")
         }
 
