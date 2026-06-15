@@ -70,6 +70,22 @@ open "build/Codex Taskbar.app"
 
 如果启动后暂时没有显示用量，可以先在 Codex 中运行 `/status`，或者发送一条 Codex 消息，让本地 rate-limit 事件刷新。
 
+## 安装与安全提示
+
+当前 Release 是未公证版本。它使用 ad-hoc 签名保证 App bundle 内部完整性，但没有 Apple Developer ID 签名和 Apple 公证。
+
+如果双击打开时 macOS 提示“Apple 无法验证是否包含恶意软件”，可以使用下面任一方式打开：
+
+1. 在 `Applications` 中右键点击 `Codex Taskbar.app`，选择 `打开`，再在安全提示中确认打开。
+2. 如果仍然被拦截，在终端执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Codex Taskbar.app"
+open "/Applications/Codex Taskbar.app"
+```
+
+后续如果提供 Apple Developer ID 证书和公证凭据，可以改为正式签名和公证分发，安装时就不会出现这类 Gatekeeper 提示。
+
 ## 数据来源
 
 Codex Taskbar 会查找：
@@ -166,6 +182,22 @@ open "build/Codex Taskbar.app"
 ```
 
 If no usage appears yet, open Codex and run `/status` or send one Codex message so the local rate-limit event is refreshed.
+
+### Installation and Security Notice
+
+The current Release is not notarized. It uses an ad-hoc signature for bundle integrity, but it is not signed with an Apple Developer ID certificate and has not been notarized by Apple.
+
+If macOS says Apple cannot verify the app, use one of these options:
+
+1. Right-click `Codex Taskbar.app` in `Applications`, choose `Open`, then confirm opening it.
+2. If it is still blocked, run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Codex Taskbar.app"
+open "/Applications/Codex Taskbar.app"
+```
+
+With an Apple Developer ID certificate and notarization credentials, future releases can be signed and notarized so this Gatekeeper warning does not appear.
 
 ### Data Source
 
