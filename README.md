@@ -120,6 +120,22 @@ Codex Taskbar 会查找：
 
 使用菜单里的 `开机启动` 选项，可以把 Codex Taskbar 添加到 macOS 登录项，或从登录项中移除。较新的 macOS 版本第一次注册时，可能需要在系统设置中批准。
 
+## Bartender 显示
+
+Codex Taskbar 是文本型菜单栏项目，正常情况下在 Bartender 中应该显示类似：
+
+```text
+5h 71% 22:57 | 1w 86% 6月22日
+```
+
+如果 Bartender 中显示成灰色方块，通常表示它没有拿到稳定的菜单栏文字，或者该项目被放进了隐藏/始终隐藏区域。v0.1.2 起，App 会在启动和无数据状态下始终提供文本标题 `5h -- | 1w --`，并显式禁用状态栏图片，避免 Bartender 退回图标占位。
+
+如果仍然显示异常：
+
+1. 退出并重新打开 `Codex Taskbar`。
+2. 在 Bartender 里把 `Codex Taskbar` 放到 `显示的项目`。
+3. 打开 Codex 并运行 `/status`，或发送一条 Codex 消息，让本地用量事件刷新。
+
 ## 版本与更新
 
 应用版本号由仓库根目录的 `VERSION` 文件管理，构建脚本会把它写入 App 的 `Info.plist`。
@@ -250,6 +266,22 @@ It reads the newest `codex.rate_limits` websocket event and extracts the `primar
 ### Login Item
 
 Use the `开机启动` menu item to add or remove Codex Taskbar from macOS Login Items. On recent macOS versions, the first registration may require approval in System Settings.
+
+### Bartender Display
+
+Codex Taskbar is a text-based menu bar item. In Bartender, it should normally look like:
+
+```text
+5h 71% 22:57 | 1w 86% 6月22日
+```
+
+If Bartender shows a gray square, it usually means Bartender did not receive a stable text title, or the item was moved into a hidden section. Since v0.1.2, the app always provides a text title, including the no-data state `5h -- | 1w --`, and explicitly disables status item images so Bartender does not fall back to an icon placeholder.
+
+If it still looks wrong:
+
+1. Quit and reopen `Codex Taskbar`.
+2. Move `Codex Taskbar` into Bartender's visible items.
+3. Open Codex and run `/status`, or send one Codex message to refresh the local usage event.
 
 ### Versioning and Updates
 

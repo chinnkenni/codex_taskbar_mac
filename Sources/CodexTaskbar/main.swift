@@ -434,8 +434,7 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
     private var updateState: UpdateState = .idle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem.button?.title = "Codex --"
-        statusItem.button?.toolTip = "Codex Taskbar"
+        setStatusTitle("5h -- | 1w --", tooltip: "Codex Taskbar")
         refresh()
         scheduleTimer()
         scheduleAutomaticUpdateCheck()
@@ -453,16 +452,28 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
             let snapshot = try reader.readLatest()
             latestSnapshot = snapshot
             latestError = nil
-            statusItem.button?.title = title(for: snapshot)
-            statusItem.button?.toolTip = tooltip(for: snapshot)
+            setStatusTitle(title(for: snapshot), tooltip: tooltip(for: snapshot))
         } catch {
             latestSnapshot = nil
             latestError = error
-            statusItem.button?.title = "Codex --"
-            statusItem.button?.toolTip = error.localizedDescription
+            setStatusTitle("5h -- | 1w --", tooltip: error.localizedDescription)
         }
 
         rebuildMenu()
+    }
+
+    private func setStatusTitle(_ title: String, tooltip: String) {
+        statusItem.length = NSStatusItem.variableLength
+
+        guard let button = statusItem.button else {
+            return
+        }
+
+        button.image = nil
+        button.alternateImage = nil
+        button.title = title
+        button.attributedTitle = NSAttributedString(string: title)
+        button.toolTip = tooltip
     }
 
     private func rebuildMenu() {
