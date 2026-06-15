@@ -74,10 +74,29 @@ open "build/Codex Taskbar.app"
 
 当前 Release 是未公证版本。它使用 ad-hoc 签名保证 App bundle 内部完整性，但没有 Apple Developer ID 签名和 Apple 公证。
 
-如果双击打开时 macOS 提示“Apple 无法验证是否包含恶意软件”，可以使用下面任一方式打开：
+这是因为当前项目还没有 Apple Developer 账号签发的 Developer ID 证书和 Apple 公证。首次打开时，macOS 可能会显示下面的 Gatekeeper 提示：
 
-1. 在 `Applications` 中右键点击 `Codex Taskbar.app`，选择 `打开`，再在安全提示中确认打开。
-2. 如果仍然被拦截，在终端执行：
+![Gatekeeper 拦截提示](docs/images/gatekeeper-blocked.png)
+
+可以按下面步骤手动允许打开：
+
+1. 在弹窗右上角点击 `?` 问号图标，打开 Apple 帮助说明。
+
+   ![Apple 帮助说明](docs/images/gatekeeper-help.png)
+
+2. 在帮助说明中点击蓝色链接 `为我打开“隐私与安全性”设置`。
+
+3. 在系统设置的 `隐私与安全性` 页面向下找到 `安全性`，点击 `仍要打开`。
+
+   ![隐私与安全性中点击仍要打开](docs/images/privacy-security-open-anyway.png)
+
+4. 再次弹出确认窗口时，点击 `仍要打开`，并按系统提示输入登录密码。
+
+   ![确认仍要打开](docs/images/gatekeeper-open-anyway-confirm.png)
+
+完成后，`Codex Taskbar` 会被加入本机安全例外，之后可以像普通 App 一样打开。
+
+如果 GUI 流程仍然被拦截，也可以使用终端移除隔离标记：
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Codex Taskbar.app"
@@ -187,10 +206,28 @@ If no usage appears yet, open Codex and run `/status` or send one Codex message 
 
 The current Release is not notarized. It uses an ad-hoc signature for bundle integrity, but it is not signed with an Apple Developer ID certificate and has not been notarized by Apple.
 
-If macOS says Apple cannot verify the app, use one of these options:
+This is because the project does not yet have an Apple Developer ID certificate and Apple notarization. On first launch, macOS may show this Gatekeeper prompt:
 
-1. Right-click `Codex Taskbar.app` in `Applications`, choose `Open`, then confirm opening it.
-2. If it is still blocked, run:
+![Gatekeeper blocked prompt](docs/images/gatekeeper-blocked.png)
+
+To allow the app:
+
+1. Click the `?` icon in the upper-right corner of the warning dialog.
+2. In the Apple Help page, click the blue `Privacy & Security` quick link.
+
+   ![Apple Help page](docs/images/gatekeeper-help.png)
+
+3. In `System Settings` > `Privacy & Security`, scroll to `Security`, then click `Open Anyway`.
+
+   ![Privacy & Security open anyway](docs/images/privacy-security-open-anyway.png)
+
+4. In the confirmation dialog, click `Open Anyway` and enter your login password when prompted.
+
+   ![Confirm open anyway](docs/images/gatekeeper-open-anyway-confirm.png)
+
+After that, Codex Taskbar is saved as a local security exception and can be opened normally.
+
+If the GUI flow is still blocked, remove the quarantine flag manually:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Codex Taskbar.app"
