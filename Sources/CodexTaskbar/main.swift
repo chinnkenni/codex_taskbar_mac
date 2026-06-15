@@ -100,6 +100,141 @@ struct Preferences {
             defaults.set(newValue, forKey: "refreshInterval")
         }
     }
+
+    var lastUpdateCheckAt: TimeInterval {
+        get {
+            defaults.double(forKey: "lastUpdateCheckAt")
+        }
+        set {
+            defaults.set(newValue, forKey: "lastUpdateCheckAt")
+        }
+    }
+}
+
+struct Version: Comparable {
+    let parts: [Int]
+
+    init(_ rawValue: String) {
+        let cleaned = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+        parts = cleaned
+            .split(separator: ".")
+            .map { segment in
+                let digits = segment.prefix { $0.isNumber }
+                return Int(digits) ?? 0
+            }
+    }
+
+    static func < (lhs: Version, rhs: Version) -> Bool {
+        let count = max(lhs.parts.count, rhs.parts.count)
+        for index in 0..<count {
+            let left = index < lhs.parts.count ? lhs.parts[index] : 0
+            let right = index < rhs.parts.count ? rhs.parts[index] : 0
+            if left != right {
+                return left < right
+            }
+        }
+        return false
+    }
+}
+
+struct UpdateInfo {
+    let tagName: String
+    let version: String
+    let releaseURL: URL
+    let downloadURL: URL?
+}
+
+enum UpdateState {
+    case idle
+    case checking
+    case current(Date)
+    case available(UpdateInfo)
+    case failed(String)
+}
+
+final class UpdateChecker {
+    private let releaseAPI = URL(string: "https://api.github.com/repos/chinnkenni/codex_taskbar_mac/releases/latest")!
+
+    func check(currentVersion: String, completion: @escaping (Result<UpdateState, Error>) -> Void) {
+        var request = URLRequest(url: releaseAPI)
+        request.setValue("Codex-Taskbar", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data else {
+                completion(.failure(UpdateError.emptyResponse))
+                return
+            }
+
+            do {
+                let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+                guard let releaseURL = URL(string: release.htmlURL) else {
+                    completion(.failure(UpdateError.invalidReleaseURL))
+                    return
+                }
+
+                let version = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+                let downloadURL = release.assets
+                    .first(where: { $0.name.hasSuffix(".dmg") })
+                    .flatMap { URL(string: $0.browserDownloadURL) }
+                let info = UpdateInfo(
+                    tagName: release.tagName,
+                    version: version,
+                    releaseURL: releaseURL,
+                    downloadURL: downloadURL
+                )
+
+                if Version(version) > Version(currentVersion) {
+                    completion(.success(.available(info)))
+                } else {
+                    completion(.success(.current(Date())))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+}
+
+enum UpdateError: Error, LocalizedError {
+    case emptyResponse
+    case invalidReleaseURL
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyResponse:
+            return "更新服务没有返回数据"
+        case .invalidReleaseURL:
+            return "更新地址无效"
+        }
+    }
+}
+
+private struct GitHubRelease: Decodable {
+    let tagName: String
+    let htmlURL: String
+    let assets: [GitHubReleaseAsset]
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+        case assets
+    }
+}
+
+private struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let browserDownloadURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
 }
 
 final class CodexRateLimitReader {
@@ -290,16 +425,20 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let reader = CodexRateLimitReader()
     private let loginItem = LoginItemController()
+    private let updateChecker = UpdateChecker()
+    private let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     private var preferences = Preferences()
     private var timer: Timer?
     private var latestSnapshot: RateLimitSnapshot?
     private var latestError: Error?
+    private var updateState: UpdateState = .idle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem.button?.title = "Codex --"
         statusItem.button?.toolTip = "Codex Taskbar"
         refresh()
         scheduleTimer()
+        scheduleAutomaticUpdateCheck()
     }
 
     private func scheduleTimer() {
@@ -347,6 +486,8 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         addRefreshIntervalItems(to: menu)
         menu.addItem(.separator())
         addLaunchAtLoginItem(to: menu)
+        menu.addItem(.separator())
+        addUpdateItems(to: menu)
         menu.addItem(.separator())
 
         let copyItem = NSMenuItem(title: "复制状态", action: #selector(copyStatus), keyEquivalent: "c")
@@ -420,6 +561,69 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
         if loginItem.needsApproval {
             menu.addItem(disabledItem(title: "需要在系统设置里批准登录项"))
         }
+    }
+
+    private func addUpdateItems(to menu: NSMenu) {
+        menu.addItem(disabledItem(title: "版本: \(currentVersion)"))
+
+        switch updateState {
+        case .idle:
+            break
+        case .checking:
+            menu.addItem(disabledItem(title: "正在检查更新..."))
+        case .current(let checkedAt):
+            menu.addItem(disabledItem(title: "已是最新版 · \(relativeTime(checkedAt))"))
+        case .available(let info):
+            let item = NSMenuItem(title: "发现新版本 \(info.tagName)", action: #selector(openLatestRelease), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        case .failed(let message):
+            menu.addItem(disabledItem(title: "检查更新失败: \(message)"))
+        }
+
+        let checkItem = NSMenuItem(title: "检查更新", action: #selector(checkUpdatesFromMenu), keyEquivalent: "")
+        checkItem.target = self
+        menu.addItem(checkItem)
+    }
+
+    private func scheduleAutomaticUpdateCheck() {
+        let now = Date().timeIntervalSince1970
+        guard now - preferences.lastUpdateCheckAt > 86_400 else {
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.checkForUpdates()
+        }
+    }
+
+    private func checkForUpdates() {
+        updateState = .checking
+        rebuildMenu()
+
+        updateChecker.check(currentVersion: currentVersion) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else {
+                    return
+                }
+
+                self.preferences.lastUpdateCheckAt = Date().timeIntervalSince1970
+                switch result {
+                case .success(let state):
+                    self.updateState = state
+                case .failure(let error):
+                    self.updateState = .failed(error.localizedDescription)
+                }
+                self.rebuildMenu()
+            }
+        }
+    }
+
+    private func latestReleaseURL() -> URL? {
+        if case .available(let info) = updateState {
+            return info.releaseURL
+        }
+        return URL(string: "https://github.com/chinnkenni/codex_taskbar_mac/releases/latest")
     }
 
     private func title(for snapshot: RateLimitSnapshot) -> String {
@@ -535,6 +739,17 @@ final class CodexTaskbarApp: NSObject, NSApplicationDelegate {
             latestError = error
         }
         refresh()
+    }
+
+    @objc private func checkUpdatesFromMenu() {
+        checkForUpdates()
+    }
+
+    @objc private func openLatestRelease() {
+        guard let url = latestReleaseURL() else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func quit() {
