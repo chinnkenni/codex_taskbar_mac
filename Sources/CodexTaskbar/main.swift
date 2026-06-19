@@ -255,11 +255,22 @@ final class CodexRateLimitReader {
         }
 
         let sql = """
+        with events as (
+          select id, ts, feedback_log_body
+          from logs
+          where target = 'codex_client::default_client'
+            and feedback_log_body like '%Request completed method=POST url=https://chatgpt.com/backend-api/codex/responses status=200 OK headers={%'
+            and feedback_log_body like '%"x-codex-primary-used-percent"%'
+            and feedback_log_body like '%"x-codex-secondary-used-percent"%'
+          union all
+          select id, ts, feedback_log_body
+          from logs
+          where target = 'codex_api::endpoint::responses_websocket'
+            and feedback_log_body like '%websocket event: {"type":"codex.rate_limits"%'
+            and feedback_log_body like '%"rate_limits"%'
+        )
         select ts || char(9) || feedback_log_body
-        from logs
-        where target = 'codex_api::endpoint::responses_websocket'
-          and feedback_log_body like '%websocket event: {"type":"codex.rate_limits"%'
-          and feedback_log_body like '%"rate_limits"%'
+        from events
         order by id desc
         limit 1;
         """
@@ -279,17 +290,21 @@ final class CodexRateLimitReader {
         let observedAt = TimeInterval(parts[0]).map(Date.init(timeIntervalSince1970:)) ?? Date()
         let body = parts[1]
 
-        guard let eventJSON = extractEventJSON(from: body) else {
-            throw ReaderError.unparseableEvent
+        if let snapshot = parseHeaderSnapshot(from: body, observedAt: observedAt, databasePath: databasePath) {
+            return snapshot
         }
 
-        let decoded = try JSONDecoder().decode(CodexRateLimitEvent.self, from: Data(eventJSON.utf8))
-        return RateLimitSnapshot(
-            primary: decoded.rateLimits.primary.window,
-            secondary: decoded.rateLimits.secondary.window,
-            observedAt: observedAt,
-            databasePath: databasePath
-        )
+        if let eventJSON = extractEventJSON(from: body) {
+            let decoded = try JSONDecoder().decode(CodexRateLimitEvent.self, from: Data(eventJSON.utf8))
+            return RateLimitSnapshot(
+                primary: decoded.rateLimits.primary.window,
+                secondary: decoded.rateLimits.secondary.window,
+                observedAt: observedAt,
+                databasePath: databasePath
+            )
+        }
+
+        throw ReaderError.unparseableEvent
     }
 
     private func runSQLite(databasePath: String, sql: String) throws -> String {
@@ -366,6 +381,47 @@ final class CodexRateLimitReader {
         }
 
         return nil
+    }
+
+    private func parseHeaderSnapshot(from body: String, observedAt: Date, databasePath: String) -> RateLimitSnapshot? {
+        guard let primaryUsed = headerInt("x-codex-primary-used-percent", in: body),
+              let secondaryUsed = headerInt("x-codex-secondary-used-percent", in: body),
+              let primaryWindow = headerInt("x-codex-primary-window-minutes", in: body),
+              let secondaryWindow = headerInt("x-codex-secondary-window-minutes", in: body),
+              let primaryReset = headerInt("x-codex-primary-reset-at", in: body),
+              let secondaryReset = headerInt("x-codex-secondary-reset-at", in: body) else {
+            return nil
+        }
+
+        return RateLimitSnapshot(
+            primary: RateLimitWindow(
+                usedPercent: primaryUsed,
+                windowMinutes: primaryWindow,
+                resetAt: TimeInterval(primaryReset)
+            ),
+            secondary: RateLimitWindow(
+                usedPercent: secondaryUsed,
+                windowMinutes: secondaryWindow,
+                resetAt: TimeInterval(secondaryReset)
+            ),
+            observedAt: observedAt,
+            databasePath: databasePath
+        )
+    }
+
+    private func headerInt(_ name: String, in body: String) -> Int? {
+        let escapedName = NSRegularExpression.escapedPattern(for: name)
+        let pattern = #""\#(escapedName)"\s*:\s*"(\d+)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        let range = NSRange(body.startIndex..<body.endIndex, in: body)
+        guard let match = regex.firstMatch(in: body, range: range),
+              match.numberOfRanges > 1,
+              let capture = Range(match.range(at: 1), in: body) else {
+            return nil
+        }
+        return Int(body[capture])
     }
 }
 

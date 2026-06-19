@@ -3,11 +3,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Codex Taskbar"
-APP_DIR="$ROOT_DIR/build/$APP_NAME.app"
+BUILD_APP_DIR="$ROOT_DIR/build/$APP_NAME.app"
+BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/codex-taskbar-build.XXXXXX")"
+APP_DIR="$BUILD_ROOT/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+
+cleanup() {
+  rm -rf "$BUILD_ROOT"
+}
+trap cleanup EXIT
 
 cd "$ROOT_DIR"
 
@@ -25,7 +32,6 @@ swiftc \
   "$ROOT_DIR/Sources/CodexTaskbar/main.swift" \
   -o "$ROOT_DIR/.build/CodexTaskbar"
 
-rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$ROOT_DIR/.build/CodexTaskbar" "$MACOS_DIR/Codex Taskbar"
@@ -70,4 +76,10 @@ xattr -d com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
 codesign --force --deep --sign - "$APP_DIR" >/dev/null
 xattr -d com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
 
-echo "$APP_DIR"
+rm -rf "$BUILD_APP_DIR"
+mkdir -p "$ROOT_DIR/build"
+cp -R "$APP_DIR" "$BUILD_APP_DIR"
+xattr -cr "$BUILD_APP_DIR"
+xattr -d com.apple.FinderInfo "$BUILD_APP_DIR" 2>/dev/null || true
+
+echo "$BUILD_APP_DIR"
